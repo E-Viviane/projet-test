@@ -1,0 +1,2017 @@
+openapi: 3.0.3
+info:
+  title: API Helpdesk (Laravel + MySQL)
+  version: 1.0.0
+  description: 'API REST de gestion de tickets d''assistance : authentification par jetons Sanctum, CRUD, filtres, tri, pagination,
+    relations imbriquées, fichiers, corbeille, statistiques.
+
+
+    Comptes de démonstration (mot de passe `password`) : admin@demo.test, agent@demo.test, user@demo.test.
+
+
+    Format d''erreur uniforme : `{"message": "...", "code": "identifiant_stable", ...}` ; en 422 s''ajoute `errors` (par champ).'
+servers:
+- url: http://127.0.0.1:8000/api/v1
+  description: Serveur local (php artisan serve)
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: 'Jeton obtenu par /auth/connexion : Authorization: Bearer <jeton>'
+  schemas:
+    Erreur:
+      type: object
+      required:
+      - message
+      - code
+      properties:
+        message:
+          type: string
+          example: Transition impossible.
+        code:
+          type: string
+          example: transition_invalide
+        errors:
+          type: object
+          description: 'Présent en 422 : tableau de messages par champ'
+          additionalProperties:
+            type: array
+            items:
+              type: string
+paths:
+  /:
+    get:
+      summary: 'Point d''entrée : liste des ressources'
+      tags:
+      - Système
+      description: 'Accès : **public**.'
+      responses:
+        '200':
+          description: Succès
+  /sante:
+    get:
+      summary: Sonde de supervision (base de données)
+      tags:
+      - Système
+      description: 'Accès : **public**.'
+      responses:
+        '200':
+          description: Succès
+        '503':
+          description: Service indisponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+  /demo/codes/{code}:
+    get:
+      summary: Provoque un code HTTP (local/testing seulement)
+      tags:
+      - Système
+      description: 'Accès : **public**. code : 200, 201, 204, 400, 401, 403, 404, 409, 422, 429, 500, 503'
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Succès
+        '400':
+          description: Requête invalide
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '409':
+          description: Conflit avec l'état de la ressource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '429':
+          description: Trop de requêtes (en-tête Retry-After)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '500':
+          description: Erreur serveur
+        '503':
+          description: Service indisponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+  /auth/inscription:
+    post:
+      summary: Créer un compte (rôle user) et recevoir un jeton
+      tags:
+      - Auth
+      description: 'Accès : **public**.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              name: Marie Dossou
+              email: marie@demo.test
+              password: motdepasse1
+              password_confirmation: motdepasse1
+      responses:
+        '201':
+          description: Créé (en-tête Location)
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '429':
+          description: Trop de requêtes (en-tête Retry-After)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+  /auth/connexion:
+    post:
+      summary: 'Se connecter : jeton Bearer valable 8 h'
+      tags:
+      - Auth
+      description: 'Accès : **public**. 5 essais/minute par email+IP'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              email: user@demo.test
+              password: password
+              appareil: mon-portable
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '429':
+          description: Trop de requêtes (en-tête Retry-After)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+  /auth/moi:
+    get:
+      summary: Mon profil
+      tags:
+      - Auth
+      description: 'Accès : **connecté**.'
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    patch:
+      summary: Modifier mon nom / email
+      tags:
+      - Auth
+      description: 'Accès : **connecté**.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              name: Nouveau Nom
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /auth/mot-de-passe:
+    put:
+      summary: Changer mon mot de passe (révoque mes autres jetons)
+      tags:
+      - Auth
+      description: 'Accès : **connecté**.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              mot_de_passe_actuel: password
+              password: nouveau123
+              password_confirmation: nouveau123
+      responses:
+        '204':
+          description: Succès sans contenu
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /auth/deconnexion:
+    post:
+      summary: Révoquer le jeton utilisé
+      tags:
+      - Auth
+      description: 'Accès : **connecté**.'
+      responses:
+        '204':
+          description: Succès sans contenu
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /auth/deconnexion-totale:
+    post:
+      summary: Révoquer tous mes jetons
+      tags:
+      - Auth
+      description: 'Accès : **connecté**.'
+      responses:
+        '204':
+          description: Succès sans contenu
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /auth/jetons:
+    get:
+      summary: Lister mes jetons (appareils)
+      tags:
+      - Auth
+      description: 'Accès : **connecté**.'
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /auth/jetons/{id}:
+    delete:
+      summary: Révoquer un de mes jetons
+      tags:
+      - Auth
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '204':
+          description: Succès sans contenu
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tickets:
+    get:
+      summary: 'Lister les tickets : filtres, tri, pagination, inclusions'
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**. Un utilisateur ne voit que ses tickets ; agents et admins voient tout'
+      parameters:
+      - name: statut
+        in: query
+        required: false
+        schema:
+          type: string
+        example: nouveau,en_cours
+      - name: priorite
+        in: query
+        required: false
+        schema:
+          type: string
+        example: haute,critique
+      - name: agent_id
+        in: query
+        required: false
+        schema:
+          type: string
+        example: '3'
+      - name: auteur_id
+        in: query
+        required: false
+        schema:
+          type: string
+        example: '2'
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+        example: imprimante
+      - name: tag
+        in: query
+        required: false
+        schema:
+          type: string
+        example: reseau
+      - name: cree_apres
+        in: query
+        required: false
+        schema:
+          type: string
+        example: '2026-10-01'
+      - name: cree_avant
+        in: query
+        required: false
+        schema:
+          type: string
+        example: '2026-10-31'
+      - name: en_retard
+        in: query
+        required: false
+        schema:
+          type: string
+        example: '1'
+      - name: tri
+        in: query
+        required: false
+        schema:
+          type: string
+        example: -priorite,created_at
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: string
+        example: '2'
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: string
+        example: '20'
+      - name: pagination
+        in: query
+        required: false
+        schema:
+          type: string
+        example: page
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+        example: valeur
+      - name: inclure
+        in: query
+        required: false
+        schema:
+          type: string
+        example: auteur,agent,tags,commentaires,pieces_jointes
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    post:
+      summary: Créer un ticket (201 + Location ; en-tête Idempotency-Key supporté)
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+        description: 'Valeur unique (8–100 car.) : un renvoi identique rejoue la réponse sans créer de doublon.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              titre: Imprimante en panne
+              description: Plus de papier détecté par le capteur
+              priorite: haute
+              echeance: '2026-12-31'
+              tags:
+              - 1
+              - 2
+      responses:
+        '201':
+          description: Créé (en-tête Location)
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tickets/export:
+    get:
+      summary: Export CSV en flux (mêmes filtres que la liste)
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: statut
+        in: query
+        required: false
+        schema:
+          type: string
+        example: nouveau
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+        example: imprimante
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tickets/corbeille:
+    get:
+      summary: Tickets supprimés
+      tags:
+      - Tickets
+      description: 'Accès : **admin**.'
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tickets/actions-groupees:
+    post:
+      summary: 'Changer le statut de plusieurs tickets (207 : résultat par ticket)'
+      tags:
+      - Tickets
+      description: 'Accès : **agent**.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              ids:
+              - 1
+              - 2
+              - 3
+              statut: en_cours
+      responses:
+        '207':
+          description: Succès partiel (résultat par élément)
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tickets/{id}:
+    get:
+      summary: 'Détail d''un ticket (ETag : 304 si inchangé)'
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: inclure
+        in: query
+        required: false
+        schema:
+          type: string
+        example: auteur,tags,commentaires
+      responses:
+        '200':
+          description: Succès
+        '304':
+          description: Non modifié (ETag)
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    put:
+      summary: Remplacer un ticket (champs obligatoires)
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**. Le statut ne se change pas ici : voir /transitions'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              titre: Imprimante réparée
+              description: Remplacement de la cartouche
+              priorite: basse
+              echeance: null
+              tags:
+              - 1
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '409':
+          description: Conflit avec l'état de la ressource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    patch:
+      summary: Modifier partiellement un ticket
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              priorite: critique
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '409':
+          description: Conflit avec l'état de la ressource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    delete:
+      summary: Supprimer (corbeille, récupérable)
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '204':
+          description: Succès sans contenu
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tickets/{id}/restauration:
+    post:
+      summary: Restaurer depuis la corbeille
+      tags:
+      - Tickets
+      description: 'Accès : **admin**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '409':
+          description: Conflit avec l'état de la ressource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tickets/{id}/definitif:
+    delete:
+      summary: Supprimer définitivement (depuis la corbeille)
+      tags:
+      - Tickets
+      description: 'Accès : **admin**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '204':
+          description: Succès sans contenu
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '409':
+          description: Conflit avec l'état de la ressource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tickets/{id}/assignation:
+    post:
+      summary: Assigner à un agent
+      tags:
+      - Tickets
+      description: 'Accès : **agent**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              agent_id: 2
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '409':
+          description: Conflit avec l'état de la ressource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    delete:
+      summary: Retirer l'assignation
+      tags:
+      - Tickets
+      description: 'Accès : **agent**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '204':
+          description: Succès sans contenu
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tickets/{id}/transitions:
+    post:
+      summary: Changer le statut (machine à états)
+      tags:
+      - Tickets
+      description: 'Accès : **agent**. nouveau→en_cours|ferme ; en_cours→en_attente|resolu ; en_attente→en_cours|resolu ;
+        resolu→ferme|en_cours'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              statut: en_cours
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '409':
+          description: Conflit avec l'état de la ressource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tickets/{id}/tags:
+    put:
+      summary: Remplacer l'ensemble des tags (idempotent)
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              tags:
+              - 1
+              - 2
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tickets/{id}/commentaires:
+    get:
+      summary: Lister les commentaires (paginés)
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**. Notes internes visibles des agents seulement'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: string
+        example: '1'
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: string
+        example: '20'
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    post:
+      summary: Ajouter un commentaire
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**. interne=true réservé aux agents'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              contenu: Toujours en panne ce matin
+              interne: false
+      responses:
+        '201':
+          description: Créé (en-tête Location)
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '409':
+          description: Conflit avec l'état de la ressource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tickets/{id}/commentaires/{cid}:
+    get:
+      summary: Détail d'un commentaire (404 s'il est d'un autre ticket)
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: cid
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    put:
+      summary: Modifier un commentaire (auteur ou admin)
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: cid
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              contenu: Message corrigé
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    patch:
+      summary: Modifier un commentaire (auteur ou admin)
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: cid
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              contenu: Message corrigé
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    delete:
+      summary: Supprimer un commentaire (auteur ou admin)
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: cid
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '204':
+          description: Succès sans contenu
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tickets/{id}/pieces-jointes:
+    post:
+      summary: Envoyer un fichier (multipart, champ « fichier », 5 Mo, pdf/png/jpg/txt/docx/xlsx)
+      tags:
+      - Tickets
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - fichier
+              properties:
+                fichier:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Créé (en-tête Location)
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '409':
+          description: Conflit avec l'état de la ressource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '429':
+          description: Trop de requêtes (en-tête Retry-After)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /pieces-jointes/{id}:
+    get:
+      summary: Télécharger un fichier
+      tags:
+      - Pièces jointes
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    delete:
+      summary: Supprimer un fichier (déposant ou admin)
+      tags:
+      - Pièces jointes
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '204':
+          description: Succès sans contenu
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tags:
+    get:
+      summary: Lister les tags
+      tags:
+      - Tags
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+        example: res
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    post:
+      summary: Créer un tag
+      tags:
+      - Tags
+      description: 'Accès : **agent**.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              nom: reseau
+              couleur: '#2563eb'
+      responses:
+        '201':
+          description: Créé (en-tête Location)
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /tags/{id}:
+    get:
+      summary: Détail d'un tag
+      tags:
+      - Tags
+      description: 'Accès : **connecté**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    put:
+      summary: Remplacer un tag
+      tags:
+      - Tags
+      description: 'Accès : **agent**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              nom: réseau
+              couleur: '#1d4ed8'
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    patch:
+      summary: Modifier un tag
+      tags:
+      - Tags
+      description: 'Accès : **agent**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              couleur: '#000000'
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    delete:
+      summary: Supprimer un tag
+      tags:
+      - Tags
+      description: 'Accès : **admin**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '204':
+          description: Succès sans contenu
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /agents:
+    get:
+      summary: Agents et admins assignables (id, nom)
+      tags:
+      - Système
+      description: 'Accès : **agent**. Liste minimale pour l''assignation'
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /utilisateurs:
+    get:
+      summary: Lister les comptes
+      tags:
+      - Utilisateurs
+      description: 'Accès : **admin**.'
+      parameters:
+      - name: role
+        in: query
+        required: false
+        schema:
+          type: string
+        example: agent
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+        example: koffi
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: string
+        example: '20'
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /utilisateurs/{id}:
+    get:
+      summary: Détail d'un compte
+      tags:
+      - Utilisateurs
+      description: 'Accès : **admin**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    put:
+      summary: Modifier un compte (nom, email, rôle)
+      tags:
+      - Utilisateurs
+      description: 'Accès : **admin**. Pas d''auto-rétrogradation'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              name: Agent Koffi
+              role: agent
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '409':
+          description: Conflit avec l'état de la ressource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    patch:
+      summary: Modifier un compte (nom, email, rôle)
+      tags:
+      - Utilisateurs
+      description: 'Accès : **admin**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              role: agent
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '409':
+          description: Conflit avec l'état de la ressource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '422':
+          description: Validation échouée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+    delete:
+      summary: Supprimer un compte (409 s'il a des tickets/commentaires/fichiers)
+      tags:
+      - Utilisateurs
+      description: 'Accès : **admin**.'
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '204':
+          description: Succès sans contenu
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '404':
+          description: Introuvable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '409':
+          description: Conflit avec l'état de la ressource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []
+  /statistiques:
+    get:
+      summary: 'Agrégats : par statut, priorité, retard, 30 jours, charge des agents'
+      tags:
+      - Statistiques
+      description: 'Accès : **agent**.'
+      responses:
+        '200':
+          description: Succès
+        '401':
+          description: Non authentifié (jeton absent, invalide ou expiré)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+        '403':
+          description: Interdit (droits ou capacité du jeton)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erreur'
+      security:
+      - bearerAuth: []

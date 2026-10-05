@@ -1,0 +1,43 @@
+<?php
+
+return [
+    'required' => 'Le champ :attribute est obligatoire.',
+    'email' => 'Le champ :attribute doit être une adresse e-mail valide.',
+    'string' => 'Le champ :attribute doit être une chaîne de caractères.',
+    'integer' => 'Le champ :attribute doit être un nombre entier.',
+    'in' => 'La valeur choisie pour :attribute est invalide.',
+    'exists' => 'La valeur choisie pour :attribute est invalide.',
+    'unique' => 'La valeur du champ :attribute est déjà utilisée.',
+    'date' => 'Le champ :attribute n\'est pas une date valide.',
+    'date_format' => 'Le champ :attribute ne correspond pas au format :format.',
+    'after_or_equal' => 'Le champ :attribute doit être une date postérieure ou égale à :date.',
+    'min' => [
+        'string' => 'Le champ :attribute doit contenir au moins :min caractères.',
+        'numeric' => 'Le champ :attribute doit être au moins égal à :min.',
+        'array' => 'Le champ :attribute doit contenir au moins :min éléments.',
+        'file' => 'Le fichier :attribute doit faire au moins :min Ko.',
+    ],
+    'max' => [
+        'string' => 'Le champ :attribute ne doit pas dépasser :max caractères.',
+        'numeric' => 'Le champ :attribute ne doit pas dépasser :max.',
+        'array' => 'Le champ :attribute ne doit pas contenir plus de :max éléments.',
+        'file' => 'Le fichier :attribute ne doit pas dépasser :max Ko.',
+    ],
+    'attributes' => [
+        'nom' => 'nom',
+        'email' => 'e-mail',
+        'password' => 'mot de passe',
+        'type' => 'type de demande',
+        'description' => 'description',
+        'statut' => 'statut',
+        'reference' => 'référence',
+        'date' => 'date',
+        'heure' => 'créneau',
+        'service_id' => 'service',
+        'intitule' => 'intitulé',
+        'priorite' => 'priorité',
+        'echeance' => 'échéance',
+        'contenu' => 'note',
+        'user_id' => 'agent',
+    ],
+];
